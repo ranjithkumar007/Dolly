@@ -54,7 +54,6 @@ def main(model_name,data_dir,batch_size,num_layers,learning_rate, state_size,dro
     in_file = os.path.join(data_dir,"mapping_opp.pkl")
     with open(in_file,"rb") as handle:
         user_features = pickle.load(handle)
-        user_features = user_features[0]
    
     num_ans = len(set(train_y)|set(test_y)|set(val_y))
     print("#Answers :",num_ans)
@@ -102,7 +101,7 @@ def main(model_name,data_dir,batch_size,num_layers,learning_rate, state_size,dro
             'val' : (val_X,val_y,val_seq_len,val_buzzes), 
             'test':(test_X,test_y,test_seq_len,test_buzzes)}
 
-    loader = MBLoader(inputs)
+    loader = MBLoader(inputs, user_features)
     logger = run(inputs, model, criterion, optimizer, early_stopping, early_stopping_interval, checkpoint_file = checkpoint_file, num_epochs = num_epochs, restore = restore)
 
     plot_from_logger(logger)

@@ -8,7 +8,7 @@ from content_model import QA_RNN, run, plot_from_logger #,test
 import click
 import pickle
 import torch.backends.cudnn as cudnn
-from minibatchloader import MBLoader
+from helper_classes import MBLoader
 
 np.random.seed(0)
 torch.manual_seed(0)

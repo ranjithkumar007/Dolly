@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import click
 import time
 import math
-from model_helpers import load_checkpoint, save_checkpoint, sequence_masks, load_best_model
+from helper_functions import load_checkpoint, save_checkpoint, sequence_masks, load_best_model
 from torch.autograd import Variable
 
 np.random.seed(0)
@@ -88,11 +88,8 @@ def train(loader, model, criterion, optimizer):
 
     with click.progressbar(range(num_batch)) as batch_indexes:
         for batch_i in batch_indexes:
-            mb_X, mb_y, mb_len = loader.load_next_batch('train', False)
+            mb_X, mb_y, mb_len, all_mask, last_mask = loader.load_next_batch('train', False)
             
-            all_mask, last_mask = sequence_masks(sequence_length=mb_len, max_len=max_seq_len)
-            all_mask = all_mask.flatten().float()
-            last_mask = last_mask.flatten().float()
 
             mb_y = mb_y.view(-1, 1).repeat(1, max_seq_len).flatten()
             outputs = model(mb_X, mb_len)
@@ -144,11 +141,7 @@ def validate(loader, model, criterion, is_test = False):
         
         with click.progressbar(range(num_batch)) as batch_indexes:
             for batch_i in batch_indexes:
-                mb_X, mb_y, mb_len = loader.load_next_batch(split, False) 
-
-                all_mask, last_mask = sequence_masks(sequence_length=mb_len, max_len=max_seq_len)
-                all_mask = all_mask.flatten().float()
-                last_mask = last_mask.flatten().float()
+                mb_X, mb_y, mb_len, all_mask, last_mask = loader.load_next_batch(split, False) 
 
                 mb_y = mb_y.view(-1, 1).repeat(1, max_seq_len).flatten()
                 outputs = model(mb_X, mb_len)
