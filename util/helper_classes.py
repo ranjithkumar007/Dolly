@@ -1,8 +1,10 @@
 from collections import namedtuple
 import math
-from helper_functions import sequence_masks
 import torch
 import torch.nn as nn
+import random
+
+from helper_functions import sequence_masks
 
 class ParallelTable(nn.Module):
     def __init__(self, model1, model2):
@@ -11,9 +13,8 @@ class ParallelTable(nn.Module):
         self.layer2 = model2
         
     def forward(self, x):
-        y = [self.layer1(x[0]), self.layer2(x[1])]
+        y = (self.layer1(x[0]), self.layer2(x[1]))
         return y
-
 
 
 Transition = namedtuple('Transition',
@@ -44,15 +45,13 @@ class ReplayMemory(object):
 class MBLoader:
     def __init__(self, inputs, batch_size, user_stats = None):
         self.inputs = inputs
-        self.batch_ind = {'train' : 0, 'test' : 0, 'val' : 0}
+        self.batch_ind = [0, 0, 0]
         self.batch_size = batch_size
         get_num_batches = lambda inp : int(math.ceil(inp[0].size(0)/float(self.batch_size)))
-        self.num_batches = {'train' : get_num_batches(inputs['train']), 
-                            'val' : get_num_batches(inputs['val']), 
-                            'test' : get_num_batches(inputs['test'])}
+        self.num_batches = [get_num_batches(inputs[i]) for i in range(3)]
 
         self.user_stats = user_stats
-        self.max_seq_len = self.inputs['train'][0].size(1)
+        self.max_seq_len = self.inputs[0][0].size(1)
 
     def load_next_batch(self, split, buzz_info = False):
         end_ind = (self.batch_ind[split]+1) * self.batch_size
@@ -69,13 +68,9 @@ class MBLoader:
         mb_len = self.inputs[split][2][start_ind:end_ind]
 
         all_mask, last_mask = sequence_masks(sequence_length=mb_len, max_len=self.max_seq_len)
-        all_mask = all_mask.flatten().float()
-        last_mask = last_mask.flatten().float()
 
         if buzz_info:
             mb_buzzes = self.inputs[split][3][start_ind:end_ind]
-            return mb_X, mb_y, mb_len, all_mask, last_mask, mb_buzzes
+            return mb_X, mb_y, mb_len, mb_buzzes, all_mask, last_mask
         else:
             return mb_X, mb_y, mb_len, all_mask, last_mask
-        
-

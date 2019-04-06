@@ -1,5 +1,8 @@
-figures/
-data/
-checkpoints/
+*.pth
+*.pth.tar
+*.tar
 __pycache__/
 *.png
+nohup.out
+*.out
+data/

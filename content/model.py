@@ -7,8 +7,9 @@ import matplotlib.pyplot as plt
 import click
 import time
 import math
-from helper_functions import load_checkpoint, save_checkpoint, sequence_masks, load_best_model
 from torch.autograd import Variable
+
+from ..util.helper_functions import load_checkpoint, save_checkpoint, sequence_masks, load_best_model
 
 np.random.seed(0)
 torch.manual_seed(0)
@@ -83,13 +84,14 @@ def train(loader, model, criterion, optimizer):
     last_correct = 0
     end = time.time()
     batch_size = model.batch_size
-    num_batch = loader.num_batches['train']
+    num_batch = loader.num_batches[0] # split = 0 for train
     max_seq_len = loader.max_seq_len
 
     with click.progressbar(range(num_batch)) as batch_indexes:
         for batch_i in batch_indexes:
             mb_X, mb_y, mb_len, all_mask, last_mask = loader.load_next_batch('train', False)
-            
+            all_mask = all_mask.flatten().float()
+            last_mask = last_mask.flatten().float()
 
             mb_y = mb_y.view(-1, 1).repeat(1, max_seq_len).flatten()
             outputs = model(mb_X, mb_len)
@@ -142,6 +144,9 @@ def validate(loader, model, criterion, is_test = False):
         with click.progressbar(range(num_batch)) as batch_indexes:
             for batch_i in batch_indexes:
                 mb_X, mb_y, mb_len, all_mask, last_mask = loader.load_next_batch(split, False) 
+                all_mask = all_mask.flatten().float()
+                last_mask = last_mask.flatten().float()
+
 
                 mb_y = mb_y.view(-1, 1).repeat(1, max_seq_len).flatten()
                 outputs = model(mb_X, mb_len)
@@ -166,8 +171,8 @@ def validate(loader, model, criterion, is_test = False):
 
 
 def run(loader, model, criterion, optimizer, early_stopping, early_stopping_interval, checkpoint_file, num_epochs, restore = True):
-    logger = {'train' : {'loss' : [], 'last_acc' : [], 'avg_acc' : []}, 
-                'val' : {'loss' : [], 'last_acc' : [], 'avg_acc' : []}}
+    logger = [{'loss' : [], 'last_acc' : [], 'avg_acc' : []} for i in range(3)]
+
     start_epoch = 1
     min_loss = 99999999999999999
     ntrial = 0
@@ -178,17 +183,17 @@ def run(loader, model, criterion, optimizer, early_stopping, early_stopping_inte
     for epoch in range(start_epoch, num_epochs + 1):
         
         train_loss, avg_acc, last_acc = train(loader, model, criterion, optimizer)
-        logger['train']['loss'].append(train_loss)
-        logger['train']['last_acc'].append(last_acc)
-        logger['train']['avg_acc'].append(avg_acc)
+        logger[0]['loss'].append(train_loss)
+        logger[0]['last_acc'].append(last_acc)
+        logger[0]['avg_acc'].append(avg_acc)
         
         print('On training set : Epoch:  %d | Loss: %.4f | avg_acc : %.2f | last_acc : %.2f' 
           %(epoch, train_loss, avg_acc, last_acc)) 
 
         val_loss, avg_acc, last_acc = validate(loader, model, criterion)
-        logger['val']['loss'].append(val_loss)
-        logger['val']['last_acc'].append(last_acc)
-        logger['val']['avg_acc'].append(avg_acc)
+        logger[1]['loss'].append(val_loss)
+        logger[1]['last_acc'].append(last_acc)
+        logger[1]['avg_acc'].append(avg_acc)
         
         is_best = False
         if val_loss < min_loss:
@@ -214,51 +219,10 @@ def run(loader, model, criterion, optimizer, early_stopping, early_stopping_inte
     model = load_best_model(model)
     test_loss, avg_acc, last_acc = validate(loader, model, criterion, is_test = True)
     print('On Test set(Best from validation set)  Loss: %.4f | avg_acc : %.2f | last_acc : %.2f' 
-          %(test_loss, avg_acc, last_acc)) 
+          %(test_loss, avg_acc, last_acc))
+
+    logger[2]['loss'].append(test_loss)
+    logger[2]['last_acc'].append(last_acc)
+    logger[2]['avg_acc'].append(avg_acc)
     
     return logger
-
-def plot_from_logger(logger):
-    x = np.arange(1, len(logger['train']['loss']) + 1)
-
-    plt.plot(x, logger['train']['loss'])
-    plt.xlabel('Number of epochs')
-    plt.ylabel('train_loss')
-    plt.show()
-    plt.savefig('train_loss.png')
-    plt.close() 
-
-    plt.plot(x, logger['val']['loss'])
-    plt.xlabel('Number of epochs')
-    plt.ylabel('val_loss')
-    plt.show()
-    plt.savefig('val_loss.png')
-    plt.close() 
-
-    plt.plot(x, logger['train']['last_acc'])
-    plt.xlabel('Number of epochs')
-    plt.ylabel('train_last_acc')
-    plt.show()
-    plt.savefig('train_last_acc.png')
-    plt.close() 
-
-    plt.plot(x, logger['val']['last_acc'])
-    plt.xlabel('Number of epochs')
-    plt.ylabel('val_last_acc')
-    plt.show()
-    plt.savefig('val_last_acc.png')
-    plt.close() 
-
-    plt.plot(x, logger['train']['avg_acc'])
-    plt.xlabel('Number of epochs')
-    plt.ylabel('train_avg_acc')
-    plt.show()
-    plt.savefig('train_avg_acc.png')
-    plt.close() 
-    
-    plt.plot(x, logger['val']['avg_acc'])
-    plt.xlabel('Number of epochs')
-    plt.ylabel('val_avg_acc')
-    plt.show()
-    plt.savefig('val_avg_acc.png')
-    plt.close() 

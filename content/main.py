@@ -4,17 +4,20 @@ import torch.nn.functional as F
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-from model import QA_RNN, run, plot_from_logger #,test
 import click
 import pickle
 import torch.backends.cudnn as cudnn
+
+from model import QA_RNN, run
+from ..util.helper_classes import MBLoader
+from ..util.helper_functions import plot_from_logger
 
 np.random.seed(0)
 torch.manual_seed(0)
 
 @click.command()
 @click.option('--model_name', default="buzz_RL", help='Name of model.',show_default=True)
-@click.option('--data_dir', default="data/", help='Path to dataset file containing questions.')
+@click.option('--data_dir', default="../data/", help='Path to dataset file containing questions.')
 @click.option('--checkpoint_file', default="checkpoints/checkpoint.pth", help='Path of checkpoint_file')
 @click.option('--batch_size', default=64, help="Batch size.",show_default=True)
 @click.option('--num_layers', default=1, help="Number of RNN layers.",show_default=True)
@@ -54,6 +57,7 @@ def main(model_name,data_dir,batch_size,num_layers,learning_rate, state_size,dro
     in_file = os.path.join(data_dir,"mapping_opp.pkl")
     with open(in_file,"rb") as handle:
         user_features = pickle.load(handle)
+        user_features = user_features[0]
    
     num_ans = len(set(train_y)|set(test_y)|set(val_y))
     print("#Answers :",num_ans)
@@ -82,6 +86,11 @@ def main(model_name,data_dir,batch_size,num_layers,learning_rate, state_size,dro
     test_seq_len = torch.from_numpy(test_seq_len)
     embd_mat = torch.from_numpy(embd_mat)#.cuda()
 
+    model = QA_RNN(batch_size, train_X.size(1), num_layers, state_size, num_ans + 1, embd_mat, non_trainable = True, disable_cuda = disable_cuda)
+    print(model)
+
+    criterion = nn.CrossEntropyLoss(ignore_index = 0)
+
     if not disable_cuda:
         torch.backends.cudnn.enabled = True
         cudnn.benchmark = True
@@ -97,12 +106,19 @@ def main(model_name,data_dir,batch_size,num_layers,learning_rate, state_size,dro
         val_y = val_y.cuda()
         # val_seq_len = val_seq_len.cpu()
         
-    inputs = {'train': (train_X,train_y,train_seq_len,train_buzzes), 
-            'val' : (val_X,val_y,val_seq_len,val_buzzes), 
-            'test':(test_X,test_y,test_seq_len,test_buzzes)}
+    optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=learning_rate)
 
-    loader = MBLoader(inputs, user_features)
-    logger = run(inputs, model, criterion, optimizer, early_stopping, early_stopping_interval, checkpoint_file = checkpoint_file, num_epochs = num_epochs, restore = restore)
+
+    print(optimizer)
+    print(criterion)
+    # print(next(model.parameters()).is_cuda)
+
+    inputs = [(train_X,train_y,train_seq_len), 
+            	(val_X,val_y,val_seq_len), 
+            	(test_X,test_y,test_seq_len)]
+
+    loader = MBLoader(inputs, batch_size)
+    logger = run(loader, model, criterion, optimizer, early_stopping, early_stopping_interval, checkpoint_file = checkpoint_file, num_epochs = num_epochs, restore = restore)
 
     plot_from_logger(logger)
 

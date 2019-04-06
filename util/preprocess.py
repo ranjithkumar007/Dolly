@@ -7,7 +7,8 @@ import os
 from nltk.tokenize import word_tokenize
 import numpy as np
 import pickle
-from util.convert_raw_to_csv import convert2csv
+
+from convert_raw_to_csv import convert2csv
 
 def convert_to_ids(data,word2id,ans2id):
     X = []
@@ -24,7 +25,7 @@ def convert_to_ids(data,word2id,ans2id):
             X.append(X_i)
             Y.append(ans2id[ans])
 
-            buzzes.append(data.iloc[i][3].split('-'))
+            buzzes.append([list(x.split('-')) for x in data.iloc[i][3].split('|')])
 
     seq_len = [len(X_i) for X_i in X]   
 

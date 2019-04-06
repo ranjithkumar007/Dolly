@@ -4,18 +4,29 @@ import torch.nn.functional as F
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-from model import QA_RNN, run, plot_from_logger #,test
 import click
 import pickle
 import torch.backends.cudnn as cudnn
+
+from model import run
+from ..content.model import QA_RNN
+from ..util.helper_functions import load_best_model, plot_from_logger
+from ..util.helper_classes import MBLoader
 
 np.random.seed(0)
 torch.manual_seed(0)
 
 @click.command()
 @click.option('--model_name', default="buzz_RL", help='Name of model.',show_default=True)
+@click.option('--replay_memory_size', default=1048576, help="Size of replay memory",show_default=True)
+@click.option('--gamma', default=0.99, help="Discount factor.",show_default=True)
+@click.option('--eps_start', default=0.95, help="greedy action eps start",show_default=True)
+@click.option('--eps_end', default=0.05, help="greedy action eps end",show_default=True)
+@click.option('--eps_decay', default=1000000, help="greedy action eps decay",show_default=True)
+@click.option('--target_update', default=10000, help="sync interval btw policy and target nets",show_default=True)
 @click.option('--data_dir', default="data/", help='Path to dataset file containing questions.')
-@click.option('--checkpoint_file', default="checkpoints/checkpoint.pth", help='Path of checkpoint_file')
+@click.option('--checkpoint_file', default="checkpoints/buzz/checkpoint.pth", help='Path of checkpoint_file')
+@click.option('--content_model_path', default="checkpoints/content/best_model.pth", help='Path of checkpoint_file')
 @click.option('--batch_size', default=64, help="Batch size.",show_default=True)
 @click.option('--num_layers', default=1, help="Number of RNN layers.",show_default=True)
 @click.option('--learning_rate', default=0.001, help="LR",show_default=True)
@@ -23,14 +34,14 @@ torch.manual_seed(0)
 @click.option('--dropout', default=0.0, help="keep_prob for droupout.",show_default=True)
 @click.option('--val_interval', default=1, help='validation interval for early stopping. ',show_default=True)
 @click.option('--save_interval', default=1, help='save_interval for saving the model parameters. ',show_default=True)
-@click.option('--num_epochs', default=50, help='Number of iteration to train.',show_default=True)
+@click.option('--num_episodes', default=50, help='Number of iteration to train.',show_default=True)
 @click.option('--train_embeddings', default=False, is_flag=True, help='train word embeddings.',show_default=True)
 @click.option('--disable_cuda', default=False, is_flag=True, help='run on gpu or not',show_default=True)
 @click.option('--restore', default=False, is_flag=True, help='restore previous model',show_default=True)
 @click.option('--debug', default=False, is_flag=True, help='Debug model',show_default=True)
 @click.option('--early_stopping', default=True, is_flag=True, help='early stopping on validation error.',show_default=True)
 @click.option('--early_stopping_interval', default=15, help='early stopping on validation error.',show_default=True)
-def main(model_name,data_dir,batch_size,num_layers,learning_rate, state_size,dropout,save_interval,val_interval,early_stopping_interval,num_epochs,train_embeddings,early_stopping,disable_cuda,checkpoint_file,restore,debug):
+def main(model_name,gamma, eps_start, eps_end, eps_decay, target_update, data_dir,batch_size,num_layers,learning_rate, state_size,dropout,save_interval,val_interval,early_stopping_interval,num_episodes,train_embeddings,early_stopping,disable_cuda,checkpoint_file,restore,debug,replay_memory_size,content_model_path):
     preprocessed_file = os.path.join(data_dir,"preprocessed_data.npz")
     nf = np.load(preprocessed_file)
     train_X,train_y,train_seq_len,\
@@ -86,14 +97,12 @@ def main(model_name,data_dir,batch_size,num_layers,learning_rate, state_size,dro
     model = QA_RNN(batch_size, train_X.size(1), num_layers, state_size, num_ans + 1, embd_mat, non_trainable = True, disable_cuda = disable_cuda)
     print(model)
 
-
-    criterion = nn.CrossEntropyLoss(ignore_index = 0)
+    content_model = load_best_model(model, filename = content_model_path)
 
     if not disable_cuda:
         torch.backends.cudnn.enabled = True
         cudnn.benchmark = True
-        model.cuda()
-        criterion = criterion.cuda()
+        content_model.cuda()
         train_X = train_X.cuda()
         # train_seq_len = train_seq_len.cpu()
         train_y = train_y.cuda()
@@ -103,22 +112,21 @@ def main(model_name,data_dir,batch_size,num_layers,learning_rate, state_size,dro
         val_X = val_X.cuda()
         val_y = val_y.cuda()
         # val_seq_len = val_seq_len.cpu()
+
         
-    optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=learning_rate)
+    inputs =  [(train_X,train_y,train_seq_len,train_buzzes), 
+            	(val_X,val_y,val_seq_len,val_buzzes), 
+            	(test_X,test_y,test_seq_len,test_buzzes)]
 
+    hyperparameters = {'gamma' : gamma, 'eps_start' : eps_start, 'eps_end' : eps_end, 
+    					'eps_decay' : eps_decay, 'target_update' : target_update,
+                        'num_episodes' : num_episodes, 'replay_memory_size' : replay_memory_size}
 
-    print(optimizer)
-    print(criterion)
-    # print(next(model.parameters()).is_cuda)
+	
+    loader = MBLoader(inputs, batch_size, user_features)
+    run(hyperparameters, content_model, loader, restore, checkpoint_file)
 
-    inputs = {'train': (train_X,train_y,train_seq_len), 
-            'val' : (val_X,val_y,val_seq_len), 
-            'test':(test_X,test_y,test_seq_len)}
-
-    loader = MBLoader(inputs)
-    logger = run(inputs, model, criterion, optimizer, early_stopping, early_stopping_interval, checkpoint_file = checkpoint_file, num_epochs = num_epochs, restore = restore)
-
-    plot_from_logger(logger)
+    plot_from_logger(logger, isbuzz = True)
 
 if __name__ == '__main__':
     main()

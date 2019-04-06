@@ -1,6 +1,7 @@
 import pandas as pd
 import os
 import numpy as np
+
 np.random.seed(5)
 
 def convert2csv(data_dir, file_name):
@@ -27,12 +28,12 @@ def convert2csv(data_dir, file_name):
 				else:
 					assert(cor=='1')
 					pos_b.append(int(pos))
+				buzz_d.append((qid, uid, int(pos), int(cor), cat, float(pos)/float(qlen)))
 			temp = (qtext.strip(), ans.strip(), cat.strip(), buzzes)
 
 			split = split.strip()
 			if split == "train":
 				data_train.append(temp)
-				buzz_d.append((qid, uid, int(pos), int(cor), cat, float(pos)/float(qlen)))
 			elif split == "dev":
 				data_cv.append(temp)
 			else:
