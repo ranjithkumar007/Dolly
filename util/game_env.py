@@ -1,6 +1,6 @@
 import torch
 
-from evaluate import get_payoff
+from .evaluate import get_payoff
 
 class GameEnv:
 	def __init__(self, content_model, loader, hist_len = 2):
@@ -22,9 +22,9 @@ class GameEnv:
 		self.buzz_ptr = 0
 		
 	def new_game(self, split):
-		# print("New game")
-		if self.split != split:
-			self.reset()
+		# if split != 0:
+		# 	print("New game")
+		self.reset()
 		self.split = split
 
 		self.load_next_buzz()
@@ -40,13 +40,15 @@ class GameEnv:
 		return self.get_state()
 
 	def load_next_buzz(self):
+		# if self.split != 0:
+		# 	print("Load nbuzz")
 		if self.buzz_ptr >= self.tot_buzzes:
 			self.load_next_question()
 
 		player_buzz = None
 		if self.split != 0:
-			self.buzz_ptr = self.buzz_ptr + 1
 			player_buzz = self.buzzes[self.buzz_ptr]
+			self.buzz_ptr = self.buzz_ptr + 1
 		else:
 			self.buzz_ptr = self.tot_buzzes
 			player_buzz = self.buzzes[torch.randint(len(self.buzzes), (1, 1))]
@@ -146,7 +148,12 @@ class GameEnv:
 			buzz_pos = self.n_step - 1
 			correct = (self.ans_pred[self.game_ptr][buzz_pos - 1] == self.ans_target[self.game_ptr])
 
-			assert(buzz_pos <= self.player_buzz_pos or not self.player_correct)
+			try:
+				assert(buzz_pos <= self.player_buzz_pos or not self.player_correct)
+			except Exception as e:
+				print(buzz_pos, self.player_buzz_pos, self.player_correct)
+				assert(0)
+
 			terminal = True
 			reward = get_payoff(buzz_pos, correct, self.player_buzz_pos, self.player_correct)
 
@@ -168,6 +175,8 @@ class GameEnv:
 
 		ts = min(self.n_step, self.max_step)
 		state = self.fill_state(ts)
+
+		# print(ts, self.n_step, self.max_step, self.player_buzz_pos, self.player_correct, reward, terminal)
 
 		return state, reward, terminal
 

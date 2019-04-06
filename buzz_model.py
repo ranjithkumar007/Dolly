@@ -7,8 +7,9 @@ import math
 import click
 import matplotlib.pyplot as plt
 
-from ..util.game_env import GameEnv
-from ..util.helper_classes import ReplayMemory, Transition
+from util.game_env import GameEnv
+from util.helper_classes import ReplayMemory, Transition
+from util.helper_functions import load_checkpoint_buzz, load_best_model, save_checkpoint 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -127,7 +128,7 @@ def plot_durations(episode_durations):
 def validate(policy_net, env, split = 1):
     
     with torch.no_grad():
-        epoch_size = loader.inputs[split][0].size(0)
+        epoch_size = env.loader.inputs[split][0].size(0)
 
         epoch_reward = 0
         epoch_buzz_pos = 0
@@ -159,6 +160,8 @@ def validate(policy_net, env, split = 1):
 
 def run(hyperparams, content_model, loader, restore, checkpoint_file = None):
     env = GameEnv(content_model, loader)
+    # val_env = GameEnv(content_model, loader)
+
 
     n_actions = env.n_actions
     inp_state_dim = env.inp_state_dim
@@ -199,10 +202,9 @@ def run(hyperparams, content_model, loader, restore, checkpoint_file = None):
     memory = ReplayMemory(replay_memory_size)
 
     # episode_durations = []
-    start_epoch = int(start_game_ind / epoch_size)
-    last_epoch = start_epoch - 1
-
     epoch_size = loader.inputs[0][0].size(0)
+    start_epoch = int(start_game_ind / epoch_size)
+
 
     num_games = num_episodes * epoch_size
     epoch_reward = 0
@@ -213,41 +215,6 @@ def run(hyperparams, content_model, loader, restore, checkpoint_file = None):
     with click.progressbar(range(start_game_ind, num_games)) as game_inds:
         for i_game in game_inds:
             # Initialize the environment and state
-            epoch = int(i_game / epoch_size)
-            
-            if epoch != last_epoch:
-                if last_epoch >= 0:
-                    print('On training set : Epoch:  %d | avg_reward: %.4f | avg_buzz_pos : %.2f' 
-                          %(epoch, epoch_reward/epoch_size, epoch_buzz_pos/epoch_size)) 
-
-                    logger[0]['avg_reward'].append(epoch_reward / epoch_size)
-                    logger[0]['avg_buzz_pos'].append(epoch_buzz_pos / epoch_size)
-
-                    val_reward, val_buzz_pos = validate(policy_net, env, split = 1)
-                    
-                    is_best = False
-                    if val_reward < min_val_reward : 
-                        print("Best Model Found")
-                        is_best = True
-
-                    print('On validation set : Epoch:  %d | avg_reward: %.4f | avg_buzz_pos : %.2f' 
-                          %(epoch, val_reward, val_buzz_pos)) 
-
-                    logger[1]['avg_reward'].append(val_reward)
-                    logger[1]['avg_buzz_pos'].append(val_buzz_pos)
-
-                    save_checkpoint({'hyperparams': hyperparams,
-                        'state_dict': policy_net.state_dict(),
-                        'env' : env,
-                        'memory' : memory,
-                        'steps_done' : steps_done,
-                        'logger': logger,
-                        'min_val_reward' : min_val_reward,
-                        'optimizer' : optimizer.state_dict()}, is_best, checkpoint_file, pref = 'buzz')
-
-                epoch_reward = 0
-                last_epoch = epoch
-
             state, reward, terminal = env.new_game(0) # split = 0 for train
             state = state.cuda()
             
@@ -285,16 +252,45 @@ def run(hyperparams, content_model, loader, restore, checkpoint_file = None):
                     break
 
             # Update the target network, copying all weights and biases in DQN
-            if i_game % target_update == 0:
+            if (i_game + 1) % target_update == 0:
                 target_net.load_state_dict(policy_net.state_dict())
 
-    if last_epoch >= 0:
-            print('On training set : Epoch:  %d | avg_reward: %.4f | avg_buzz_pos : %.2f' 
-                    %(epoch, epoch_reward/epoch_size, epoch_buzz_pos/epoch_size)) 
-            epoch_rewards.append(epoch_reward)
+            
+            if (i_game + 1) % epoch_size == 0:
+                epoch = int(i_game / epoch_size)
+                print('On training set : Epoch:  %d | avg_reward: %.4f | avg_buzz_pos : %.2f' 
+                      %(epoch, epoch_reward/epoch_size, epoch_buzz_pos/epoch_size)) 
+
+                logger[0]['avg_reward'].append(epoch_reward / epoch_size)
+                logger[0]['avg_buzz_pos'].append(epoch_buzz_pos / epoch_size)
+
+                val_reward, val_buzz_pos = validate(policy_net, env, split = 1)
+                
+                is_best = False
+                if val_reward < min_val_reward : 
+                    print("Best Model Found")
+                    is_best = True
+
+                print('On validation set : Epoch:  %d | avg_reward: %.4f | avg_buzz_pos : %.2f' 
+                      %(epoch, val_reward, val_buzz_pos)) 
+
+                logger[1]['avg_reward'].append(val_reward)
+                logger[1]['avg_buzz_pos'].append(val_buzz_pos)
+
+                save_checkpoint({'hyperparams': hyperparams,
+                    'state_dict': policy_net.state_dict(),
+                    'env' : env,
+                    'memory' : memory,
+                    'steps_done' : steps_done,
+                    'logger': logger,
+                    'min_val_reward' : min_val_reward,
+                    'optimizer' : optimizer.state_dict()}, is_best, checkpoint_file)
+
+                epoch_reward = 0
+                epoch_buzz_pos = 0
 
     
-    best_policy_net = load_best_model(policy_net)
+    best_policy_net = load_best_model(policy_net, filename = 'checkpoints/buzz/best_model.pth')
     test_reward, test_buzz_pos = validate(best_policy_net, env, split = 2)
     print('On Test set(Best from validation set)  avg_reward : %.2f | avg_buzz_pos : %.2f' 
           %(test_reward, test_buzz_pos)) 

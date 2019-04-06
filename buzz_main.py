@@ -8,10 +8,10 @@ import click
 import pickle
 import torch.backends.cudnn as cudnn
 
-from model import run
-from ..content.model import QA_RNN
-from ..util.helper_functions import load_best_model, plot_from_logger
-from ..util.helper_classes import MBLoader
+from buzz_model import run
+from content_model import QA_RNN
+from util.helper_functions import load_best_model, plot_from_logger
+from util.helper_classes import MBLoader
 
 np.random.seed(0)
 torch.manual_seed(0)
@@ -124,7 +124,7 @@ def main(model_name,gamma, eps_start, eps_end, eps_decay, target_update, data_di
 
 	
     loader = MBLoader(inputs, batch_size, user_features)
-    run(hyperparameters, content_model, loader, restore, checkpoint_file)
+    logger = run(hyperparameters, content_model, loader, restore, checkpoint_file)
 
     plot_from_logger(logger, isbuzz = True)
 

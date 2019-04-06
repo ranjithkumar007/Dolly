@@ -2,6 +2,9 @@ import torch
 import shutil
 import os
 from torch.autograd import Variable
+from pathlib import Path
+import numpy as np
+import matplotlib.pyplot as plt
 
 def sequence_masks(sequence_length, max_len=None):
     if max_len is None:
@@ -16,18 +19,11 @@ def sequence_masks(sequence_length, max_len=None):
                          .expand_as(seq_range_expand))
     return seq_range_expand < seq_length_expand, seq_range_expand == (seq_length_expand - 1)    
 
-def get_dir_path(pref):
-    if pref == 'content':
-        return '../checkpoints/content'
-    else:
-        return '../checkpoints/buzz'
-
-def load_checkpoint(model, optimizer, logger, filename, pref = 'content'):
+def load_checkpoint(model, optimizer, logger, filename):
     start_epoch = 0
     min_loss = 99999999999999999
-    dirpath = get_dir_path(pref)
-
-    if os.path.isfile(dirpath + '/' + filename):
+    
+    if os.path.isfile(filename):
         print("=> loading checkpoint '{}'".format(filename))
         checkpoint = torch.load(filename)
         start_epoch = checkpoint['epoch']
@@ -42,21 +38,18 @@ def load_checkpoint(model, optimizer, logger, filename, pref = 'content'):
 
     return model, optimizer, start_epoch, logger, min_loss
 
-def save_checkpoint(state, is_best, filename, pref = 'content'):
-    dirpath = get_dir_path(pref)
-
-    if not os.path.exists(dirpath):
-        os.makedirs(dirpath)
-
-    if not os.path.isfile(dirpath + '/' + filename):
+def save_checkpoint(state, is_best, filename):
+    if not os.path.isfile(filename):
         os.mknod(filename)
 
+    dirpath = os.path.dirname(filename)
     torch.save(state, filename)
+
     if is_best:
-        shutil.copyfile(filename, dirpath + pref + '_model_best.pth')
+        shutil.copyfile(filename, dirpath + '/best_model.pth')
 
 
-def load_best_model(model, filename = 'checkpoints/model_best.pth'):
+def load_best_model(model, filename):
     checkpoint = torch.load(filename)
     model.load_state_dict(checkpoint['state_dict'])
 
@@ -96,9 +89,9 @@ def plot_from_logger(logger, isbuzz = False):
     
     dirpath = None
     if isbuzz:
-        dirpath = '../figures/buzz/'
+        dirpath = 'figures/buzz/'
     else:
-        dirpath = '../figures/content/'
+        dirpath = 'figures/content/'
 
     if not os.path.exists(dirpath):
         os.makedirs(dirpath)

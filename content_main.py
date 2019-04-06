@@ -8,17 +8,17 @@ import click
 import pickle
 import torch.backends.cudnn as cudnn
 
-from model import QA_RNN, run
-from ..util.helper_classes import MBLoader
-from ..util.helper_functions import plot_from_logger
+from content_model import QA_RNN, run
+from util.helper_functions import plot_from_logger
+from util.helper_classes import MBLoader
 
 np.random.seed(0)
 torch.manual_seed(0)
 
 @click.command()
 @click.option('--model_name', default="buzz_RL", help='Name of model.',show_default=True)
-@click.option('--data_dir', default="../data/", help='Path to dataset file containing questions.')
-@click.option('--checkpoint_file', default="checkpoints/checkpoint.pth", help='Path of checkpoint_file')
+@click.option('--data_dir', default="data/", help='Path to dataset file containing questions.')
+@click.option('--checkpoint_file', default="checkpoints/content/checkpoint.pth", help='Path of checkpoint_file')
 @click.option('--batch_size', default=64, help="Batch size.",show_default=True)
 @click.option('--num_layers', default=1, help="Number of RNN layers.",show_default=True)
 @click.option('--learning_rate', default=0.001, help="LR",show_default=True)

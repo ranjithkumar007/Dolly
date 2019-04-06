@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import random
 
-from helper_functions import sequence_masks
+from .helper_functions import sequence_masks
 
 class ParallelTable(nn.Module):
     def __init__(self, model1, model2):

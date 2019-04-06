@@ -3,13 +3,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 import os
 import numpy as np
-import matplotlib.pyplot as plt
 import click
 import time
 import math
 from torch.autograd import Variable
 
-from ..util.helper_functions import load_checkpoint, save_checkpoint, sequence_masks, load_best_model
+from util.helper_functions import load_checkpoint, save_checkpoint, sequence_masks, load_best_model
 
 np.random.seed(0)
 torch.manual_seed(0)
@@ -89,7 +88,7 @@ def train(loader, model, criterion, optimizer):
 
     with click.progressbar(range(num_batch)) as batch_indexes:
         for batch_i in batch_indexes:
-            mb_X, mb_y, mb_len, all_mask, last_mask = loader.load_next_batch('train', False)
+            mb_X, mb_y, mb_len, all_mask, last_mask = loader.load_next_batch(0, False)
             all_mask = all_mask.flatten().float()
             last_mask = last_mask.flatten().float()
 
@@ -122,7 +121,7 @@ def train(loader, model, criterion, optimizer):
     return avg_loss, avg_acc, last_acc
 
 
-def validate(loader, model, criterion, is_test = False):
+def validate(loader, model, criterion, split):
 
     with torch.no_grad():
 
@@ -131,11 +130,7 @@ def validate(loader, model, criterion, is_test = False):
         total = 0
         last_total = 0
         last_correct = 0
-        split = None
-        if is_test:
-            split = 'test'
-        else:
-            split = 'val'
+
         end = time.time()
         batch_size = model.batch_size
         num_batch = loader.num_batches[split]
@@ -190,7 +185,7 @@ def run(loader, model, criterion, optimizer, early_stopping, early_stopping_inte
         print('On training set : Epoch:  %d | Loss: %.4f | avg_acc : %.2f | last_acc : %.2f' 
           %(epoch, train_loss, avg_acc, last_acc)) 
 
-        val_loss, avg_acc, last_acc = validate(loader, model, criterion)
+        val_loss, avg_acc, last_acc = validate(loader, model, criterion, split = 1)
         logger[1]['loss'].append(val_loss)
         logger[1]['last_acc'].append(last_acc)
         logger[1]['avg_acc'].append(avg_acc)
@@ -216,8 +211,8 @@ def run(loader, model, criterion, optimizer, early_stopping, early_stopping_inte
             'min_loss' : min_loss,
             'optimizer' : optimizer.state_dict()}, is_best, checkpoint_file)
 
-    model = load_best_model(model)
-    test_loss, avg_acc, last_acc = validate(loader, model, criterion, is_test = True)
+    model = load_best_model(model, filename = 'checkpoints/content/best_model.pth')
+    test_loss, avg_acc, last_acc = validate(loader, model, criterion, split = 2)
     print('On Test set(Best from validation set)  Loss: %.4f | avg_acc : %.2f | last_acc : %.2f' 
           %(test_loss, avg_acc, last_acc))
 
