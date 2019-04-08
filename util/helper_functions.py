@@ -48,13 +48,17 @@ def save_checkpoint(state, is_best, filename):
     if is_best:
         shutil.copyfile(filename, dirpath + '/best_model.pth')
 
+def load_checkpoint_policy(model, filename):
+    checkpoint = torch.load(filename)
+    model.load_state_dict(checkpoint['state_dict'])
+
+    return model
 
 def load_best_model(model, filename):
     checkpoint = torch.load(filename)
     model.load_state_dict(checkpoint['state_dict'])
 
     return model
-
 
 def load_checkpoint_buzz(hyperparams, env, policy_net, optimizer, memory, logger, filename):
     logger = [{'avg_reward' : [], 'avg_buzz_pos' : []} for i in range(3)]
@@ -66,21 +70,20 @@ def load_checkpoint_buzz(hyperparams, env, policy_net, optimizer, memory, logger
         print("=> loading checkpoint '{}'".format(filename))
         checkpoint = torch.load(filename)
         start_game_ind = checkpoint['start_game_ind']
+        steps_done = checkpoint['steps_done']
         hyperparams = checkpoint['hyperparams']
         policy_net.load_state_dict(checkpoint['state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer'])
-        env = checkpoint['env']
         memory = checkpoint['memory']
         logger = checkpoint['logger']
         min_val_reward = checkpoint['min_val_reward']
-        print("=> loaded checkpoint '{}' (epoch {})"
-                  .format(filename, checkpoint['epoch']))
+        print("=> loaded checkpoint '{}' (start_game_ind {})"
+                  .format(filename, checkpoint['start_game_ind']))
     else:
         print("=> no checkpoint found at '{}'".format(filename))
 
-    return hyperparams, env, policy_net, optimizer, memory, logger, \
-            start_game_ind, steps_done, min_val_reward, optimizer, \
-            start_epoch, logger
+    return hyperparams, policy_net, optimizer, memory, logger, \
+            start_game_ind, steps_done, min_val_reward
 
 
 def plot_from_logger(logger, isbuzz = False):

@@ -14,6 +14,7 @@ class GameEnv:
 		self.opp_state_dim = 3
 		self.inp_state_dim = self.hist_len * self.content_model.n_outputs + 1 + 3 
 		self.state_dim =  self.opp_state_dim + self.inp_state_dim
+		
 
 	def reset(self):
 		self.n_step = 0
@@ -102,6 +103,8 @@ class GameEnv:
 				print(buzz_pos, self.player_buzz_pos, self.player_correct)
 				assert(0)
 
+			# if self.n_step <= self.max_step:
+			# 	print("YO, I buzzed not at last")
 			terminal = True
 			reward = get_payoff(buzz_pos, correct, self.player_buzz_pos, self.player_correct)
 		elif self.n_step > self.player_buzz_pos:
@@ -212,6 +215,8 @@ class GameEnv:
 			state[ind] = self.user_stats[self.player_id]['overall_acc']
 			state[ind + 1] = self.user_stats[self.player_id]['mean_frac']
 			state[ind + 2] = self.user_stats[self.player_id]['total_ques']
+		# else:
+		# 	print("Missing data of ", self.player_id)
 
 		ind += 3
 		assert(ind == self.state_dim)
@@ -226,3 +231,4 @@ class GameEnv:
 		self.n_step = self.n_step + 1
 
 		return self.get_state()
+		

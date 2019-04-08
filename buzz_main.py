@@ -18,10 +18,10 @@ torch.manual_seed(0)
 
 @click.command()
 @click.option('--model_name', default="buzz_RL", help='Name of model.',show_default=True)
-@click.option('--replay_memory_size', default=1048576, help="Size of replay memory",show_default=True)
-@click.option('--gamma', default=0.99, help="Discount factor.",show_default=True)
+@click.option('--replay_memory_size', default=100000, help="Size of replay memory",show_default=True)
+@click.option('--gamma', default=0.9, help="Discount factor.",show_default=True)
 @click.option('--eps_start', default=0.95, help="greedy action eps start",show_default=True)
-@click.option('--eps_end', default=0.05, help="greedy action eps end",show_default=True)
+@click.option('--eps_end', default=0.1, help="greedy action eps end",show_default=True)
 @click.option('--eps_decay', default=1000000, help="greedy action eps decay",show_default=True)
 @click.option('--target_update', default=10000, help="sync interval btw policy and target nets",show_default=True)
 @click.option('--data_dir', default="data/", help='Path to dataset file containing questions.')
@@ -39,9 +39,12 @@ torch.manual_seed(0)
 @click.option('--disable_cuda', default=False, is_flag=True, help='run on gpu or not',show_default=True)
 @click.option('--restore', default=False, is_flag=True, help='restore previous model',show_default=True)
 @click.option('--debug', default=False, is_flag=True, help='Debug model',show_default=True)
+@click.option('--only_validate', default=False, is_flag=True, help='only val',show_default=True)
 @click.option('--early_stopping', default=True, is_flag=True, help='early stopping on validation error.',show_default=True)
 @click.option('--early_stopping_interval', default=15, help='early stopping on validation error.',show_default=True)
-def main(model_name,gamma, eps_start, eps_end, eps_decay, target_update, data_dir,batch_size,num_layers,learning_rate, state_size,dropout,save_interval,val_interval,early_stopping_interval,num_episodes,train_embeddings,early_stopping,disable_cuda,checkpoint_file,restore,debug,replay_memory_size,content_model_path):
+@click.option('--learn_start', default=50000, help='early stopping on validation error.',show_default=True)
+@click.option('--update_freq', default=4, help='early stopping on validation error.',show_default=True)
+def main(model_name,gamma, eps_start, eps_end, eps_decay, target_update, data_dir,batch_size,num_layers,learning_rate, state_size,dropout,save_interval,val_interval,early_stopping_interval,num_episodes,train_embeddings,early_stopping,disable_cuda,checkpoint_file,restore,debug,replay_memory_size,content_model_path, only_validate, learn_start, update_freq):
     preprocessed_file = os.path.join(data_dir,"preprocessed_data.npz")
     nf = np.load(preprocessed_file)
     train_X,train_y,train_seq_len,\
@@ -118,15 +121,21 @@ def main(model_name,gamma, eps_start, eps_end, eps_decay, target_update, data_di
             	(val_X,val_y,val_seq_len,val_buzzes), 
             	(test_X,test_y,test_seq_len,test_buzzes)]
 
-    hyperparameters = {'gamma' : gamma, 'eps_start' : eps_start, 'eps_end' : eps_end, 
-    					'eps_decay' : eps_decay, 'target_update' : target_update,
-                        'num_episodes' : num_episodes, 'replay_memory_size' : replay_memory_size}
+    hyperparameters = {'gamma' : gamma, 
+                        'eps_start' : eps_start, 
+                        'eps_end' : eps_end, 
+    					'eps_decay' : eps_decay, 
+                        'target_update' : target_update,
+                        'num_episodes' : num_episodes, 
+                        'replay_memory_size' : replay_memory_size,
+                        'update_freq': update_freq,
+                        'learn_start' : learn_start}
 
 	
     loader = MBLoader(inputs, batch_size, user_features)
-    logger = run(hyperparameters, content_model, loader, restore, checkpoint_file)
+    logger = run(hyperparameters, content_model, loader, restore, checkpoint_file, only_validate)
 
-    plot_from_logger(logger, isbuzz = True)
+    # plot_from_logger(logger, isbuzz = True)
 
 if __name__ == '__main__':
     main()
