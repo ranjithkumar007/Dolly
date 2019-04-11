@@ -10,6 +10,9 @@ import pickle
 
 from convert_raw_to_csv import convert2csv
 
+PAD = '<eos>'
+UNK = '<unk>'
+
 def convert_to_ids(data,word2id,ans2id):
     X = []
     Y = []
@@ -20,7 +23,7 @@ def convert_to_ids(data,word2id,ans2id):
             ans = data.iloc[i][1]
 
             que_words = word_tokenize(que)            
-            X_i = [word2id[word] if word in word2id.keys() else 0 for word in que_words]
+            X_i = [word2id[word] if word in word2id.keys() else word2id[UNK] for word in que_words]
 
             X.append(X_i)
             Y.append(ans2id[ans])
@@ -42,6 +45,43 @@ def convert_to_ids(data,word2id,ans2id):
 
     return X,Y,seq_len,buzzes
 
+def build_vocab(data):
+    vocab = {}
+    for dt in data:
+        for sent in dt:
+            words = sent.split(' ')
+            for word in words:
+                if word not in vocab:
+                    vocab[word] = 0
+                vocab[word] = vocab[word] + 1
+
+    return vocab
+
+def filter_vocab(vocab, cutoff):
+    filtered = []
+    for w, cnt in vocab.items():
+        if cnt < cutoff:
+            filtered.append(w)
+
+    for w in filtered:
+        del vocab[w]
+
+    return vocab
+
+def create_mapping(vocab, spl_toks):
+    mapping = {}
+    sz = 0
+
+    for w in vocab.keys():
+        mapping[w] = sz
+        sz = sz + 1
+
+    for w in spl_toks:
+        mapping[w] = sz
+        sz = sz + 1
+
+    return sz, mapping
+
 def create_dicts(train,test,val,glove_file,glove_dim):
     #ans2id
     answers = set(train[1])|set(test[1])|set(val[1])
@@ -50,46 +90,60 @@ def create_dicts(train,test,val,glove_file,glove_dim):
     id2ans = dict(enumerate(answers))
     ans2id = dict([(y,x) for (x,y) in id2ans.items()])
 
-    # todo
-    get_words = lambda data : set([word for sent in data[0] for word in sent.split(' ')]) #word_tokenize(sent)
-    words = get_words(train)|get_words(test)|get_words(val)
-    print("#words : ",len(words))
+    vocab = build_vocab([train[0], test[0], val[0]])
+    print("Init vocab size : ", len(vocab))
+    vocab = filter_vocab(vocab, cutoff = 5)
+    
+    vocab_size, vocab_mapping = create_mapping(vocab, [UNK, PAD])
 
-    print("Reading",glove_file)
-    wordsToVec = dict()
-    with open(glove_file) as handle, click.progressbar(length=len(words)) as pbar:
+    print("Final vocab size : ",vocab_size)
+
+    # print("Reading",glove_file)
+    emb_vec = dict()
+    with open(glove_file) as handle, click.progressbar(length=vocab_size) as pbar:
         for line in handle:
             ls = line.split()
-            if ls[0] in words:
-                wordsToVec[ls[0]] = np.array(ls[-glove_dim:],dtype=np.float32)
+            if ls[0] in vocab_mapping:
+                emb_vec[ls[0]] = np.array(ls[-glove_dim:],dtype=np.float32)
                 pbar.update(1)
-    print("Words found : ",len(wordsToVec),'/',len(words))
+
+
+    print("Words found : ",len(emb_vec),'/',vocab_size)
     
     # id2word = dict([ (x+1,y) for (x,y) in enumerate(wordsToVec.keys())])
-    id2word = dict([ (x+1,y) for (x,y) in enumerate(words)])
+    id2word = dict([ (x,y) for (x,y) in enumerate(vocab_mapping)])
     word2id = dict([(y,x) for (x,y) in id2word.items()])
 
-    embd_mat = np.zeros((len(word2id)+1,glove_dim))
-    for i in id2word.keys():
-        try:
-            embd_mat[i,:] = wordsToVec[id2word[i]]
-        except KeyError as e:
-            pass
+    embd_mat = np.zeros((len(word2id),glove_dim))
+    num_unks = 0
+
+    for i, w in id2word.items():
+        if w in emb_vec:
+            embd_mat[i,:] = emb_vec[w]
+        else:
+            embd_mat[i, :] = np.random.uniform(-0.05, 0.05, glove_dim)
+            num_unks = num_unks + 1
+
+    print("num of unknowsn : ", num_unks)
     print("embd_mat.shape :",embd_mat.shape)
 
     return ans2id,word2id,embd_mat
 
-def pad_sequences(X,max_seq_len):
-    return np.array([ X_i + [0]*(max_seq_len-len(X_i)) for X_i in X ])
+def pad_sequences(X,max_seq_len, word2id):
+    return np.array([ X_i + [word2id[PAD]]*(max_seq_len-len(X_i)) for X_i in X ])
 
 @click.command()
 @click.option('--data_dir', default="data/", help='Path to dataset directory.')
-@click.option('--glove_file', default="../bhargav_code/datasets/glove.6B.300d.txt", help='Glove file path.')
+@click.option('--raw_file', default="buzz_data.txt", help='Path to rawfile')
+@click.option('--glove_file', default="../old_tf_code/datasets/glove.6B.300d.txt", help='Glove file path.')
 @click.option('--convert_to_csv', is_flag = True, default=False, help='convert raw data to csv format.',show_default=True)
 @click.option('--glove_dim', default=300, help='Dimention of glove vectors.',show_default=True)
-def main(data_dir,glove_file,glove_dim,convert_to_csv):
+def main(data_dir,glove_file,glove_dim,raw_file, convert_to_csv):
     if convert_to_csv:
-        convert2csv(data_dir, "buzz_data.txt")
+        buzz = False
+        if "buzz" in raw_file:
+            buzz = True
+        convert2csv(data_dir, raw_file, buzz)
 
     # loading data
     def load_data(filename):
@@ -106,7 +160,7 @@ def main(data_dir,glove_file,glove_dim,convert_to_csv):
     ans2id,word2id,embd_mat = create_dicts(train,test,val,glove_file,glove_dim)    
     
 
-    # converting to vectors
+    # # converting to vectors
     print("Creating data_X and data_Y.")
     train_X,train_Y,train_seq_len,train_buzzes = convert_to_ids(train,word2id,ans2id)
     print(list(map(lambda x:x.shape  ,[train_X,train_Y,train_seq_len,train_buzzes])))
@@ -122,14 +176,14 @@ def main(data_dir,glove_file,glove_dim,convert_to_csv):
     print("max_seq_len :",max_seq_len)
 
     print("Padding")
-    train_X = pad_sequences(train_X,max_seq_len)
-    test_X = pad_sequences(test_X,max_seq_len)
-    val_X = pad_sequences(val_X,max_seq_len)
+    train_X = pad_sequences(train_X,max_seq_len, word2id)
+    test_X = pad_sequences(test_X,max_seq_len, word2id)
+    val_X = pad_sequences(val_X,max_seq_len, word2id)
     print(train_X.shape)
     print(test_X.shape)
     print(val_X.shape)
 
-    #Output file
+    # Output file
     out_file = os.path.join(data_dir,"preprocessed_data.npz")
     np.savez(out_file,
 
@@ -142,7 +196,9 @@ def main(data_dir,glove_file,glove_dim,convert_to_csv):
         val_X=val_X,val_y=val_Y,val_seq_len=val_seq_len,
         val_buzzes=val_buzzes,
 
-        embd_mat=embd_mat)
+        embd_mat=embd_mat,
+        padding_index = word2id[PAD],
+        unk_index = word2id[UNK])
 
     # #output dicts
     out_file = os.path.join(data_dir,"mapping.pkl")

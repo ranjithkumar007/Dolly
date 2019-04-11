@@ -21,6 +21,7 @@ torch.manual_seed(0)
 @click.option('--checkpoint_file', default="checkpoints/content/checkpoint.pth", help='Path of checkpoint_file')
 @click.option('--batch_size', default=64, help="Batch size.",show_default=True)
 @click.option('--num_layers', default=1, help="Number of RNN layers.",show_default=True)
+@click.option('--regularisation_const', default=0, help="regularisation constant",show_default=True)
 @click.option('--learning_rate', default=0.001, help="LR",show_default=True)
 @click.option('--state_size', default=128, help="RNN state size.",show_default=True)
 @click.option('--dropout', default=0.0, help="keep_prob for droupout.",show_default=True)
@@ -33,7 +34,7 @@ torch.manual_seed(0)
 @click.option('--debug', default=False, is_flag=True, help='Debug model',show_default=True)
 @click.option('--early_stopping', default=True, is_flag=True, help='early stopping on validation error.',show_default=True)
 @click.option('--early_stopping_interval', default=15, help='early stopping on validation error.',show_default=True)
-def main(model_name,data_dir,batch_size,num_layers,learning_rate, state_size,dropout,save_interval,val_interval,early_stopping_interval,num_epochs,train_embeddings,early_stopping,disable_cuda,checkpoint_file,restore,debug):
+def main(model_name,data_dir,batch_size,num_layers,learning_rate, state_size,dropout,save_interval,val_interval,early_stopping_interval,num_epochs,train_embeddings,early_stopping,disable_cuda,checkpoint_file,restore,debug,regularisation_const):
     preprocessed_file = os.path.join(data_dir,"preprocessed_data.npz")
     nf = np.load(preprocessed_file)
     train_X,train_y,train_seq_len,\
@@ -42,13 +43,13 @@ def main(model_name,data_dir,batch_size,num_layers,learning_rate, state_size,dro
     test_buzzes,\
     val_X,val_y,val_seq_len,\
     val_buzzes,\
-    embd_mat = nf["train_X"],nf["train_y"],nf["train_seq_len"],\
+    embd_mat, padding_index, unk_index = nf["train_X"],nf["train_y"],nf["train_seq_len"],\
         nf["train_buzzes"],\
         nf["test_X"],nf["test_y"],nf["test_seq_len"],\
         nf["test_buzzes"],\
         nf["val_X"],nf["val_y"],nf["val_seq_len"],\
         nf["val_buzzes"],\
-        nf["embd_mat"]
+        nf["embd_mat"], nf["padding_index"].item(), nf["unk_index"].item()
 
     print(list(map(lambda x:x.shape  ,[train_X,train_y,train_seq_len,train_buzzes])))
     print(list(map(lambda x:x.shape  ,[test_X,test_y,test_seq_len,test_buzzes])))
@@ -89,7 +90,7 @@ def main(model_name,data_dir,batch_size,num_layers,learning_rate, state_size,dro
     model = QA_RNN(batch_size, train_X.size(1), num_layers, state_size, num_ans + 1, embd_mat, non_trainable = True, disable_cuda = disable_cuda)
     print(model)
 
-    criterion = nn.CrossEntropyLoss(ignore_index = 0)
+    criterion = nn.CrossEntropyLoss(reduction = 'none')
 
     if not disable_cuda:
         torch.backends.cudnn.enabled = True
@@ -106,7 +107,9 @@ def main(model_name,data_dir,batch_size,num_layers,learning_rate, state_size,dro
         val_y = val_y.cuda()
         # val_seq_len = val_seq_len.cpu()
         
-    optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=learning_rate)
+    # optimizer = torch.optim.RMSprop(filter(lambda p: p.requires_grad, model.parameters()), lr=learning_rate, alpha = 0.95)
+
+    optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=learning_rate, weight_decay = regularisation_const)
 
 
     print(optimizer)

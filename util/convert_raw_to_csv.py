@@ -4,7 +4,7 @@ import numpy as np
 
 np.random.seed(5)
 
-def convert2csv(data_dir, file_name):
+def convert2csv(data_dir, file_name, buzz):
 	file_name = os.path.join(data_dir, file_name)
 	data_train = []
 	data_cv = []
@@ -15,21 +15,30 @@ def convert2csv(data_dir, file_name):
 		lines = f.read().splitlines() 
 		for line in lines:
 			slots = line.split('|||')
-			assert(len(slots) == 6)
-			qid, cat, ans, split, qtext, buzzes = slots
-			qlen = len(qtext.split(' '))
-			buzzes_split = buzzes.split('|')
-			pos_b=[]
-			neg_b=[]
-			for b in buzzes_split:
-				uid, pos, cor = b.split('-')
-				if cor == '0':
-					neg_b.append(int(pos))
-				else:
-					assert(cor=='1')
-					pos_b.append(int(pos))
-				buzz_d.append((qid, uid, int(pos), int(cor), cat, float(pos)/float(qlen)))
-			temp = (qtext.strip(), ans.strip(), cat.strip(), buzzes)
+			temp = None
+
+			if not buzz:
+				assert(len(slots) == 5)
+				qid, cat, ans, split, qtext = slots
+
+				temp = (qtext.strip(), ans.strip(), cat.strip())
+			else:
+				assert(len(slots) == 6)
+				qid, cat, ans, split, qtext, buzzes = slots
+				qlen = len(qtext.split(' '))
+
+				buzzes_split = buzzes.split('|')
+				pos_b=[]
+				neg_b=[]
+				for b in buzzes_split:
+					uid, pos, cor = b.split('-')
+					if cor == '0':
+						neg_b.append(int(pos))
+					else:
+						assert(cor=='1')
+						pos_b.append(int(pos))
+					buzz_d.append((qid, uid, int(pos), int(cor), cat, float(pos)/float(qlen)))
+				temp = (qtext.strip(), ans.strip(), cat.strip(), buzzes)
 
 			split = split.strip()
 			if split == "train":

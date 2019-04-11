@@ -14,7 +14,7 @@ np.random.seed(0)
 torch.manual_seed(0)
 
 class QA_RNN(nn.Module):
-    def __init__(self, batch_size, n_steps, n_layers, hidden_size, n_outputs, embed_mat, non_trainable = True, disable_cuda = False):
+    def __init__(self, batch_size, n_steps, n_layers, hidden_size, n_outputs, embed_mat, dropout, non_trainable = True, disable_cuda = False):
         super(QA_RNN, self).__init__()
 
         self.hidden_size = hidden_size
@@ -24,6 +24,7 @@ class QA_RNN(nn.Module):
         self.n_outputs = n_outputs
         self.non_trainable = non_trainable
         self.embed_mat = embed_mat
+        self.dropout = dropout
 
         self.device = None
         if not disable_cuda and torch.cuda.is_available():
@@ -45,8 +46,9 @@ class QA_RNN(nn.Module):
         self.word_embedding = emb_layer
         
         self.gru = nn.GRU(embedding_dim, self.hidden_size, self.n_layers, batch_first = True) 
-        
+
         self.FC = nn.Linear(self.hidden_size, self.n_outputs)
+
     
     def init_hidden(self):
         # (num_layers, batch_size, n_neurons)
@@ -60,7 +62,6 @@ class QA_RNN(nn.Module):
 
         self.hidden = self.init_hidden()
         X = self.word_embedding(X) # bs X seq_len X embedding_dim
-
 
         X = torch.nn.utils.rnn.pack_padded_sequence(X, X_lengths, batch_first=True)
         X = self.gru(X, self.hidden)[0] # bs X seq_len X hidden_size
@@ -94,7 +95,9 @@ def train(loader, model, criterion, optimizer):
 
             mb_y = mb_y.view(-1, 1).repeat(1, max_seq_len).flatten()
             outputs = model(mb_X, mb_len)
-            loss = criterion(outputs, mb_y)
+            # loss = criterion(outputs, mb_y)
+            losses = criterion(outputs, mb_y)
+            loss = (all_mask.cuda() * losses).sum()
 
             _, predicted_labels = torch.max(outputs, dim = 1)
             
@@ -110,11 +113,11 @@ def train(loader, model, criterion, optimizer):
             optimizer.zero_grad()
             loss.backward()
 
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 10)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 5)
             optimizer.step()
 
     
-    avg_loss = epoch_loss / batch_size
+    avg_loss = epoch_loss / total
     avg_acc = correct / total
     last_acc = last_correct / last_total
 
@@ -142,10 +145,10 @@ def validate(loader, model, criterion, split):
                 all_mask = all_mask.flatten().float()
                 last_mask = last_mask.flatten().float()
 
-
                 mb_y = mb_y.view(-1, 1).repeat(1, max_seq_len).flatten()
                 outputs = model(mb_X, mb_len)
-                loss = criterion(outputs, mb_y)
+                losses = criterion(outputs, mb_y)
+                loss = (all_mask.cuda() * losses).sum()
 
                 _, predicted_labels = torch.max(outputs, dim = 1)
                 
@@ -158,7 +161,7 @@ def validate(loader, model, criterion, split):
 
                 epoch_loss += float(loss)
         
-        avg_loss = epoch_loss / batch_size
+        avg_loss = epoch_loss / total
         avg_acc = correct / total
         last_acc = last_correct / last_total
 
